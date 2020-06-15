@@ -1,0 +1,337 @@
+---
+title: "EDA FINAL PROJECT"
+author: "E. Kren"
+date: "06/2020"
+output: 
+  html_document:
+    theme: cosmo
+  
+---
+
+```{r setup, include=FALSE}
+source('./code/link.R')
+knitr::opts_chunk$set(echo = F, warning = F)
+```
+
+## Stations
+
+
+First, let's run through the general questions that interest us:
+
+**1. Where are the stations located?**
+
+All stations located in Europe. Here we can see a list of all countries:
+```{r}
+num_of_coun <- unique(runoff_eu_info$Country)
+num_of_coun
+```
+
+**2. How many stations/rivers exist per country?**
+
+Using R tools we get a nice plot showing us stations and rivers per country:
+```{r}
+sta_per_coun <- data.frame(table(runoff_eu_info$Country))
+ggplot(sta_per_coun, aes(x = Var1, y = Freq)) +
+  geom_bar(stat = "identity") +
+  geom_text(label = sta_per_coun$Freq, cex=4, position = position_nudge(y = 2))+xlab('Countries')+ylab('Number of stations')
+
+riv_per_coun <- as.data.table(unique(runoff_eu_info[,3:4]))
+riv_per_coun_N <- riv_per_coun[,count := .N,by="Country"]
+ggplot(riv_per_coun_N, aes(x = Country)) +
+  geom_bar(stat = "count") +
+  geom_text(aes(x = Country, y = count, label=count), cex=4, position = position_nudge(y = 2))+xlab('Countries')+ylab('Number of rivers')
+```
+
+**3. How many stations exist per river?**
+
+There is 153 rivers and 207 stations on them.
+Most rivers contain only one station. Here we can see the number of rivers
+with more than one station:
+
+```{r}
+sta_per_riv <- as.data.table(unique(runoff_eu_info[,2:3]))
+sta_per_riv_N <- sta_per_riv[,count := .N,by="River"]
+mult_sta_on_riv <- unique(sta_per_riv_N[,c(2,3)])
+ggplot(mult_sta_on_riv[count>1], aes(x = River, y = count)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(x = River, y = count, label=count), cex=4, position = position_nudge(y = 0.4)) +
+  coord_flip()+xlab('Rivers with more than one station')+ylab('Number of stations')
+
+```
+
+**4. Which is the distribution of stations in space?**
+
+```{r}
+ggplot(runoff_eu_info, aes(x = Lat, y = Lon, color = Alt)) +
+  geom_point(size=1.5) +
+  xlab('Latitude of stations') +
+  ylab('Longitude of stations') +
+  labs(color = "Altitude\nof stations") 
+
+```
+
+
+**5. Which is the distribution of record length?**
+
+Here we can see that most of stations lie between 80 and 120 years old.
+
+```{r}
+ggplot(runoff_eu_info, aes(x = Station, y = N.Years))+
+  geom_point(size = 1.5) +
+  theme(axis.text.x = element_blank()) +
+  xlab('Stations') +
+  ylab("Years of records")
+```
+
+## Annual and seasonal runoff
+
+Using runoff_eu_year.rds we can get some descriptive statistics grouped by LQ(low runoff),MQ(average runoff) and HQ(high runoff).
+
+```{r}
+desc_stat
+```
+
+And here we can see some ratios of mean/high and mean/low runoff.
+
+```{r}
+to_plot <- runoff_eu_year[,.(mean_MQ = mean(MQ)), by = Year]
+to_plot_2 <- runoff_eu_year[,.(mean_LQ = mean(LQ)), by = Year]
+to_plot <- to_plot[to_plot_2, on =.(Year = Year)]
+
+ggplot(to_plot, aes(x = Year, y = mean_LQ)) + 
+  geom_point(aes(x = Year, y = mean_MQ, color = 'Medium')) + 
+  geom_point(aes(x = Year, y = mean_LQ, color = 'Low')) + 
+  labs(color = "Runoff") +
+  xlab('Years')+
+  ylab('Mean runoff per year') ## plot of ratios of mean/low
+
+to_plot <- runoff_eu_year[,.(mean_MQ = mean(MQ)), by = Year]
+to_plot_2 <- runoff_eu_year[,.(mean_HQ = mean(HQ)), by = Year]
+to_plot <- to_plot[to_plot_2, on =.(Year = Year)]
+
+ggplot(to_plot, aes(x = Year, y = mean_HQ)) + 
+  geom_point(aes(x = Year, y = mean_MQ, color = 'Medium')) + 
+  geom_point(aes(x = Year, y = mean_HQ, color = 'High')) + 
+  labs(color = "Runoff") +
+  xlab('Years')+
+  ylab('Mean runoff per year')
+```
+
+Then I added some categories, such as the station height category and the recording length category. 
+
+Using a bit of statistical data we can look at change in the ratios of mean/high and mean/low runoff ratios for before and after 1980 for each station separately and for the categories.
+
+```{r}
+runoff_estimated
+ggplot(runoff_estimated, aes(x = sname, y = (MH_Before - MH_After)))+
+  geom_point() + 
+  xlab('Stations') +
+  ylab('Medium/High estimation before/after')+
+  theme(axis.text.x = element_blank())
+
+ggplot(runoff_estimated, aes(x = sname, y = (ML_Before - ML_After)))+
+  geom_point()+
+  xlab('Stations') +
+  ylab('Medium/Low estimation before/after')+
+  theme(axis.text.x = element_blank())
+
+```
+
+Estimation for the categories:
+
+```{r}
+#Changes in mean/high by alt_class
+ggplot(runoff_stats_newnew, aes(x = alt_class, y = (MH_Before - MH_After)))+
+  geom_point() +
+  xlab('Altitude classes') +
+  ylab('Medium/High estimation before/after')
+#Changes in mean/low by alt_class
+ggplot(runoff_stats_newnew, aes(x = alt_class, y = (ML_Before - ML_After)))+
+  geom_point() +
+  xlab('Altitude classes') +
+  ylab('Medium/Low estimation before/after')
+
+```
+
+During the course, we have already come to do classification by season, and here is an example of the result:
+
+```{r}
+
+runoff_eu_day$month <- as.numeric(substring(runoff_eu_day$date,6,7))
+runoff_eu_day$Season <- factor('Winter')
+runoff_eu_day[month >= 3 & month <= 5, Season := factor('Spring')]
+runoff_eu_day[month >= 6 & month <= 8, Season := factor('Summer')]
+runoff_eu_day[month >= 9 & month <= 11, Season := factor('Autmn')]
+
+#_b(before) and _a(after) by seasons
+runoff_summer_b <- runoff_eu_day[Season == 'Summer' & year_type == 'before 1980', .(value = mean(value)), by = .(id, year_type)]
+runoff_summer_a <- runoff_eu_day[Season == 'Summer' & year_type == 'after 1980', .(value = mean(value)), by = .(id, year_type)]
+runoff_winter_b <- runoff_eu_day[Season == 'Winter' & year_type == 'before 1980', .(value = mean(value)), by = .(id, year_type)]
+runoff_winter_a <- runoff_eu_day[Season == 'Winter' & year_type == 'after 1980', .(value = mean(value)), by = .(id, year_type)]
+
+runoff_summer_b
+```
+
+Finally we display the map:
+
+```{r}
+sta_map <- leaflet(data = runoff_eu_info) %>%
+  addTiles() %>%
+  addMarkers(~Lon, ~Lat, label = ~Station)
+sta_map
+
+```
+
+## Five rivers
+
+### Stations for research:
+
+* **MALANGSFOSS**
+Country: Norway.
+Why: Isolated at the very north of the Norway. Also, according to data from the network, this area is abundant with waterfalls, which can also have an impact on the flow.
+
+* **MALONISOGORSKAYA**
+Country: Russia.
+Why: Partly isolated, but there may be industrial influence. Also, according to data from the network, the river has a mixed, mainly snow-fed supply. Fishing is developed on the river, as well as in the seasons there is raft wood.
+
+* **WITTENBERGE**
+Country: Germany.
+Why: Center of Europe, hope we can se here good data for comparison. According to the network data, the river is subject to a strong industrial impact, and several ports are located along the river.
+
+* **GETEBRO**
+Country: Sweden.
+Why: Possible influence of tourists/locals. According to the network data, part of the drain passes through protected areas, which can give cleaner comparative results.
+
+* **SATU MARE**
+Country: Romania.
+Why: Possible influence of runoff from the mountains. According to the network, the river has its source in the mountains, and also has a predominantly snow / rain supply. Used for logging. the lower course of the river is straightened by artificial channels, river navigation is possible. In the lower reaches of the river water is used for irrigation.
+
+### Runoff seasonality
+
+Now let's present the flow data for each station for the months before 1980:
+
+* **MALANGSFOSS**The flow pattern shows that the amount of water increases during the summer months. This may be due to the Northern location and the surrounding mountainous landscape. We also see a slight decrease in maximum runoff values after 1980.
+
+* **MALONISOGORSKAYA** A sharp increase in runoff in the spring months is associated with the Northern position of the station and is explained by the melting of ice. However, there are no major changes in runoff after 1980.
+
+* **WITTENBERGE** The average values remain the same throughout the station's observation, but after 1980, some maximum flow values can be observed increasing in the spring/summer months.
+
+* **GETEBRO** Here we don't see much change in the runoff since 1980. A slight increase in runoff in the spring months, which may be due to the near-mountainous landscape.
+
+* **SATU MARE** The natural increase in runoff in the spring months is supported by the mountain landscape. However, according to our data, we see a decrease in the total flow of the river after 1980.
+
+```{r}
+ggplot(runoff_seasonal_bef80, aes(x = month, y = value))+
+  geom_point()+
+  facet_wrap(~sname, scales = 'free')+
+  xlab('Seasonal runoff before 1980') +
+  ylab('')
+
+```
+
+And after 1980.
+
+```{r}
+ggplot(runoff_seasonal_aft80, aes(x = month, y = value))+
+  geom_point()+
+  facet_wrap(~sname, scales = 'free')+
+  xlab('Seasonal runoff after 1980')+
+  ylab('')
+```
+
+### Correlation matrix
+
+The correlation data before and after 1980 are the same. We can also see:
+- GETEBRO and WITTENBERGE have a weak direct connection, which can be explained by completely different anthropogenic conditions in the area.
+- MALANGSFOSS and GETEBRO have weak feedback, which is strange, since both of these zones are not affected by anthropogenic influence, but can be explained by the abundant waterfalls in the MALANGSFOSS area.
+
+Correlation matrix for data after year 1980:
+
+```{r}
+ggplot(corr_mat_aft80, aes(x = Var1 , y = Var2, fill = value))+
+  geom_tile(col = 'black')+
+  geom_text(aes(label = round(value, 1)))+
+  theme(axis.text.x = element_text(angle = 90)) +
+  xlab(label = "") +
+  ylab(label = "")
+```
+
+Correlation matrix for data before year 1980:
+
+```{r}
+ggplot(corr_mat_bef80, aes(x = Var1 , y = Var2, fill = value))+
+  geom_tile(col = 'black')+
+  geom_text(aes(label = round(value, 1)))+
+  theme(axis.text.x = element_text(angle = 90)) +
+  xlab(label = "") +
+  ylab(label = "")
+```
+
+### Regression slopes in winter/summer runoff per station
+
+* **MALANGSFOSS** We can observe a drop in the overall level since 1940, but the data after 1980 do not give clear answers, because they have a wave-like shape.
+
+* **MALONISOGORSKAYA** We see an overall increase in runoff during the summer months throughout the period, with the exception of 1990-2000, where we can see a drop.
+
+* **WITTENBERGE** We can see a clear drop between 1980 and 2005, which may be closely related to human impact.
+
+* **GETEBRO** We can observe a slight stabilization of the runoff after 1980.
+
+* **SATU MARE** We can observe a drop in the total summer runoff after 1980 until 1990, after which the situation stabilizes.
+
+Summer runoff:
+
+```{r}
+##plot summer before 1980
+ggplot(reg_plot_summer_bef80, aes(x = year, y = mean)) +
+  geom_point(aes(col = sname)) +
+  geom_smooth(method = 'loess', formula = y ~ x, se = 0) +
+  facet_wrap(~sname, scales = 'free')+
+  xlab(label = "Before 1980(summer)") +
+  ylab(label = "Runoff(m3/s)") +
+  labs(color = "Stations")
+##plot summer after 1980
+ggplot(reg_plot_summer_aft80, aes(x = year, y = mean)) +
+  geom_point(aes(col = sname)) +
+  geom_smooth(method = 'loess', formula = y ~ x, se = 0) +
+  facet_wrap(~sname, scales = 'free')+
+  xlab(label = "After 1980(summer)") +
+  ylab(label = "Runoff(m3/s)") +
+  labs(color = "Stations")
+```
+
+* **MALANGSFOSS** We can see a drop in runoff between 1940 and 1980 and an increase from 1980 to 1990.
+
+* **MALONISOGORSKAYA** As with summer runoff, we can observe a more or less stable pattern with the exception of the period from 1990 to 2000.
+
+* **WITTENBERGE** Just as with summer runoff, we see a dip in runoff between 1980 and 2000.
+
+* **GETEBRO** Here we can observe a relatively stable picture of winter runoff.
+
+* **SATU MARE** As with summer runoff, we can see a decrease in runoff since 1980.
+
+Winter runoff:
+
+```{r}
+#plot winter before 1980
+ggplot(reg_plot_winter_bef80, aes(x = year, y = mean)) +
+  geom_point(aes(col = sname)) +
+  geom_smooth(method = 'loess', formula = y ~ x, se = 0) +
+  facet_wrap(~sname, scales = 'free')+
+  xlab(label = "Before 1980(winter)") +
+  ylab(label = "Runoff(m3/s)") +
+  labs(color = "Stations")
+#plot winter after 1980
+ggplot(reg_plot_winter_aft80, aes(x = year, y = mean)) +
+  geom_point(aes(col = sname)) +
+  geom_smooth(method = 'loess', formula = y ~ x, se = 0) +
+  facet_wrap(~sname, scales = 'free')+
+  xlab(label = "After 1980(winter)") +
+  ylab(label = "Runoff(m3/s)") +
+  labs(color = "Stations")
+```
+
+## Conclusion
+
+According to the analysis and a special sample of stations we can draw the following conclusions:
+Stations in the vicinity of which there were protected areas, as well as stations that were removed to the North did not change/had minimal changes in runoff. However, in regions that have been heavily affected by human activity, there is a General trend of falling runoff, mainly since 1980. First of all, this should be associated with the active development of these regions in economic and industrial terms. Therefore, we can conclude that the main reason for changes in river runoff can be human influence.
